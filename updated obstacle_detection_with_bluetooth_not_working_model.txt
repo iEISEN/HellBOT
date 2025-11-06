@@ -1,0 +1,162 @@
+#include <Servo.h>
+
+Servo Myservo;
+
+#define trigPin 11           // Trig Pin Of HC-SR04
+#define echoPin 12           // Echo Pin Of HC-SR04
+#define IN1 6                // Motor Driver Pin 1
+#define IN2 7                // Motor Driver Pin 2
+#define IN3 8                // Motor Driver Pin 3
+#define IN4 9                // Motor Driver Pin 4
+
+long duration, distance;
+char command;
+bool manualMode = true;        // Mode switch: Manual or Autonomous
+bool extraButtonState = false; // State of the extra button
+
+void setup() {
+  Serial.begin(9600);          // Bluetooth communication
+  pinMode(IN1, OUTPUT);        // Set Motor Pins As Output
+  pinMode(IN2, OUTPUT);
+  pinMode(IN3, OUTPUT);
+  pinMode(IN4, OUTPUT);
+  pinMode(trigPin, OUTPUT);    // Set Trig Pin As Output to Transmit Waves
+  pinMode(echoPin, INPUT);     // Set Echo Pin As Input to Receive Reflected Waves
+  Myservo.attach(13);          // Servo pin
+  
+  // Initialize the car in stopped mode
+  stop();
+}
+
+void loop() {
+  // Check for Bluetooth commands
+  if (Serial.available()) {
+    command = Serial.read();
+    controlCar(command);
+  }
+
+  // Check for obstacles
+  checkObstacle();
+}
+
+// Function to control the car's movement based on Bluetooth commands
+void controlCar(char command) {
+  // Check the state of the extra button
+  if (command == 'X') {  // Extra button turned ON
+    manualMode = false;  // Switch to Autonomous Mode
+    Serial.println("Switched to Autonomous Mode");
+  } else if (command == 'x') {  // Extra button turned OFF
+    manualMode = true;  // Switch to Manual Mode
+    Serial.println("Switched to Manual Mode");
+  } else {
+    if (manualMode) {
+      switch (command) {
+        case 'F':   // Move Forward
+          forward();
+          break;
+        case 'B':   // Move Backward
+          backward();
+          break;
+        case 'L':   // Turn Left
+          turnLeft();
+          break;
+        case 'R':   // Turn Right
+          turnRight();
+          break;
+        case 'S':   // Stop
+          stop();
+          break;
+        default:
+          stop();  // Stop the car if an unknown command is received
+          break;
+      }
+    }
+  }
+}
+
+// Function to check for obstacles using the ultrasonic sensor
+void checkObstacle() {
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+
+  duration = pulseIn(echoPin, HIGH);
+  distance = duration / 58.2;  // Convert time to distance
+  Serial.print("Distance: ");
+  Serial.println(distance);
+  delay(10);
+
+  if (manualMode && distance < 5 && distance > 0) {
+    // Obstacle detected in manual mode, avoid it
+    avoidObstacle();
+  }
+}
+
+// Function to handle obstacle avoidance
+void avoidObstacle() {
+  stop();
+  delay(100);
+
+  Myservo.write(0);     // Look left
+  delay(500);
+  Myservo.write(180);   // Look right
+  delay(500);
+  Myservo.write(90);    // Reset to center
+  delay(500);
+
+  backward();           // Move backward briefly
+  delay(500);
+  stop();
+  delay(100);
+
+  turnLeft();           // Turn left to avoid the obstacle
+  delay(500);
+  stop();
+}
+
+// Function to move the car forward
+void forward() {
+  digitalWrite(IN1, HIGH);   // Motor A forward
+  digitalWrite(IN2, LOW);    // Motor A not backward
+  digitalWrite(IN3, LOW);    // Motor B not forward
+  digitalWrite(IN4, HIGH);   // Motor B backward
+  Serial.println("Moving Forward");
+}
+
+// Function to move the car backward
+void backward() {
+  digitalWrite(IN1, LOW);    // Motor A not forward
+  digitalWrite(IN2, HIGH);   // Motor A backward
+  digitalWrite(IN3, HIGH);   // Motor B forward
+  digitalWrite(IN4, LOW);    // Motor B not backward
+  Serial.println("Moving Backward");
+}
+
+// Function to turn the car left
+void turnLeft() {
+  digitalWrite(IN1, LOW);    // Motor A not forward
+  digitalWrite(IN2, HIGH);   // Motor A backward
+  digitalWrite(IN3, LOW);    // Motor B not forward
+  digitalWrite(IN4, HIGH);   // Motor B backward
+  Serial.println("Turning Left");
+}
+
+// Function to turn the car right
+void turnRight() {
+  digitalWrite(IN1, HIGH);   // Motor A forward
+  digitalWrite(IN2, LOW);    // Motor A not backward
+  digitalWrite(IN3, HIGH);   // Motor B forward
+  digitalWrite(IN4, LOW);    // Motor B not backward
+  Serial.println("Turning Right");
+}
+
+// Function to stop the car
+void stop() {
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, LOW);
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN4, LOW);
+  Serial.println("Stopping");
+}
